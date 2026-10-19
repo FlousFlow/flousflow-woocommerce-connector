@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Extend product.template form to add WooCommerce tab -->
+    <record id="view_product_template_form_inherit_woo" model="ir.ui.view">
+        <field name="name">product.template.form.inherit.woo</field>
+        <field name="model">product.template</field>
+        <field name="inherit_id" ref="product.product_template_form_view"/>
+        <field name="arch" type="xml">
+            <xpath expr="//notebook" position="inside">
+                <page string="WooCommerce" name="woocommerce">
+                    <group>
+                        <group string="Sync Settings">
+                            <field name="sync_to_woo"/>
+                            <div class="text-muted" colspan="2">
+                                Only products enabled here can be exported to WooCommerce.
+                            </div>
+                            <field name="woo_product_id"
+                                   invisible="not woo_product_id"/>
+                            <field name="woo_sync_status" widget="badge"/>
+                            <field name="woo_last_sync"/>
+                            <button name="action_sync_to_woo" type="object"
+                                    groups="flousflow_woo_connector.group_woo_manager"
+                                    string="Sync to WooCommerce Now" class="btn-primary"
+                                    invisible="not sync_to_woo"
+                                    help="Export this product to WooCommerce immediately"/>
+                        </group>
+                        <group string="WooCommerce Catalog Data">
+                            <field name="categ_id" readonly="1"
+                                   help="Odoo accounting and inventory category; Woo classifications never replace it."/>
+                            <field name="woo_category_binding_ids" widget="many2many_tags"
+                                   options="{'no_create': True}" readonly="1"/>
+                            <field name="woo_length"/>
+                            <field name="woo_width"/>
+                            <field name="woo_height"/>
+                        </group>
+                    </group>
+                    <group string="WooCommerce Image Gallery">
+                        <field name="woo_image_ids" readonly="1">
+                            <list>
+                                <field name="sequence" widget="handle"/>
+                                <field name="image_1920" widget="image" options="{'size': [72, 72]}"/>
+                                <field name="name"/>
+                                <field name="source_url" widget="url"/>
+                            </list>
+                        </field>
+                    </group>
+                </page>
+            </xpath>
+        </field>
+    </record>
+
+    <!-- Extend product.template tree to show sync status -->
+    <record id="view_product_template_tree_inherit_woo" model="ir.ui.view">
+        <field name="name">product.template.tree.inherit.woo</field>
+        <field name="model">product.template</field>
+        <field name="inherit_id" ref="product.product_template_tree_view"/>
+        <field name="arch" type="xml">
+            <xpath expr="//field[@name='list_price']" position="after">
+                <field name="sync_to_woo" optional="hide"/>
+                <field name="woo_sync_status" widget="badge" optional="hide"/>
+            </xpath>
+        </field>
+    </record>
+
+    <!-- Extend product.template search -->
+    <record id="view_product_template_search_inherit_woo" model="ir.ui.view">
+        <field name="name">product.template.search.inherit.woo</field>
+        <field name="model">product.template</field>
+        <field name="inherit_id" ref="product.product_template_search_view"/>
+        <field name="arch" type="xml">
+            <xpath expr="//search" position="inside">
+                <separator/>
+                <filter name="woo_enabled" string="WooCommerce"
+                        domain="[('sync_to_woo', '=', True)]"/>
+                <filter name="woo_synced" string="Synced to Woo"
+                        domain="[('woo_sync_status', '=', 'synced')]"/>
+                <filter name="woo_pending" string="Pending Sync"
+                        domain="[('woo_sync_status', '=', 'pending')]"/>
+                <filter name="woo_error" string="Sync Error"
+                        domain="[('woo_sync_status', '=', 'error')]"/>
+            </xpath>
+        </field>
+    </record>
+
+    <!-- WooCommerce Products Action -->
+    <record id="action_woo_products" model="ir.actions.act_window">
+        <field name="name">WooCommerce Products</field>
+        <field name="res_model">product.template</field>
+        <field name="view_mode">list,form</field>
+        <field name="domain">['|', ('woo_product_id', '!=', False), ('sync_to_woo', '=', True)]</field>
+    </record>
+
+    <menuitem id="menu_woo_products"
+              name="Products"
+              parent="menu_woo_root"
+              sequence="40"
+              action="action_woo_products"/>
+</odoo>

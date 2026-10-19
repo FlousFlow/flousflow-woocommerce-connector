@@ -1,0 +1,225 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- ===== Tree View ===== -->
+    <record id="view_woo_config_tree" model="ir.ui.view">
+        <field name="name">woo.config.tree</field>
+        <field name="model">woo.config</field>
+        <field name="arch" type="xml">
+            <list string="WooCommerce Configurations" sample="1">
+                <field name="name"/>
+                <field name="website_url"/>
+                <field name="active" widget="boolean_toggle"/>
+                <field name="sync_direction_products"/>
+                <field name="warehouse_id"/>
+                <field name="company_id" optional="hide"/>
+                <field name="last_connection_test" optional="hide"/>
+            </list>
+        </field>
+    </record>
+
+    <!-- ===== Form View ===== -->
+    <record id="view_woo_config_form" model="ir.ui.view">
+        <field name="name">woo.config.form</field>
+        <field name="model">woo.config</field>
+        <field name="arch" type="xml">
+            <form string="WooCommerce Configuration">
+                <header>
+                    <button name="action_test_connection" type="object"
+                            string="Test Connection" class="btn-primary"
+                            groups="flousflow_woo_connector.group_woo_manager"/>
+                    <button name="action_sync_all_products" type="object"
+                            string="Export Products" class="btn-secondary" groups="flousflow_woo_connector.group_woo_manager"/>
+                    <button name="action_pull_products" type="object"
+                            string="Import Products" class="btn-secondary" groups="flousflow_woo_connector.group_woo_manager"/>
+                    <button name="action_sync_stock" type="object"
+                            string="Sync Stock" class="btn-secondary" groups="flousflow_woo_connector.group_woo_manager"/>
+                    <button name="action_pull_orders" type="object"
+                            string="Pull Orders" class="btn-secondary" groups="flousflow_woo_connector.group_woo_manager"/>
+                    <button name="action_pull_all_orders" type="object"
+                            string="Pull All Orders" class="btn-secondary"
+                            groups="flousflow_woo_connector.group_woo_manager"
+                            confirm="This will import ALL orders from WooCommerce (full backfill). Continue?"/>
+                    <button name="action_pull_customers" type="object"
+                            string="Pull Customers" class="btn-secondary" groups="flousflow_woo_connector.group_woo_manager"/>
+                    <button name="action_pull_customers_from_orders" type="object"
+                            string="Pull Customers From Orders" class="btn-secondary"
+                            groups="flousflow_woo_connector.group_woo_manager"
+                            confirm="This will create/update Odoo partners from ALL order billing data (including guests). Continue?"/>
+                    <button name="action_apply_customer_tag" type="object"
+                            string="Apply Customer Tag" class="btn-secondary"
+                            groups="flousflow_woo_connector.group_woo_manager"
+                            confirm="This will add the configured WooCommerce tag to ALL partners synced from this store (including previously-synced ones). Continue?"/>
+                    <button name="action_reset_sync" type="object"
+                            string="Reset Sync" class="btn-danger"
+                            groups="flousflow_woo_connector.group_woo_manager"
+                            confirm="This will delete ALL synced data for this config (products, orders, customers, logs). This cannot be undone. Are you sure?"/>
+                    <field name="active" widget="boolean_toggle"/>
+                </header>
+                <sheet>
+                    <div class="oe_title">
+                        <h1><field name="name" placeholder="e.g., Main Store"/></h1>
+                    </div>
+                    <notebook>
+                        <!-- Connection -->
+                        <page string="Connection">
+                            <group name="connection">
+                                <group>
+                                    <field name="website_url" widget="url"
+                                           placeholder="https://example.com"/>
+                                    <field name="consumer_key"/>
+                                    <field name="consumer_secret" password="True"/>
+                                    <field name="webhook_secret" password="True"/>
+                                </group>
+                                <group>
+                                    <field name="company_id"/>
+                                    <field name="warehouse_id"/>
+                                    <field name="pricelist_id"/>
+                                    <field name="website_pricelist_id"
+                                           help="Dedicated pricelist for website prices, separate from the main Odoo pricelist. Sync never overwrites an already-filled price; only empty prices are filled."/>
+                                    <field name="api_base_url" readonly="1"/>
+                                </group>
+                            </group>
+                        </page>
+
+                        <!-- Sync Settings -->
+                        <page string="Sync Settings">
+                            <group name="sync">
+                                <group>
+                                    <field name="sync_direction_products"/>
+                                </group>
+                                <group>
+                                    <field name="woo_prices_include_tax"/>
+                                    <field name="sale_tax_id"/>
+                                    <field name="tax_tolerance"/>
+                                    <field name="strict_total_validation"/>
+                                    <field name="log_retention_days"/>
+                                </group>
+                            </group>
+                            <group string="Product &amp; Order Handling">
+                                <group>
+                                    <field name="auto_create_products"/>
+                                    <field name="default_category_id"
+                                           required="sync_direction_products in ('woo_to_odoo', 'both')"
+                                           help="Accounting and inventory category assigned to newly imported products. Woo categories are stored separately as product tags."/>
+                                    <field name="shipping_product_id"/>
+                                    <field name="discount_product_id"/>
+                                    <field name="fee_product_id"/>
+                                    <field name="woo_order_sequence_id"/>
+                                </group>
+                            </group>
+
+                            <group string="Order Write-back &amp; Payment Terms">
+                                <group>
+                                    <field name="auto_update_order_status"
+                                           help="When a quotation is confirmed or cancelled in Odoo, the WooCommerce order status is updated (processing / cancelled)."/>
+                                    <field name="customer_tag_id"
+                                           help="Tag applied to every customer synced from this store (use 'Apply Customer Tag' to tag previously-synced customers)."/>
+                                </group>
+                                <group>
+                                    <field name="payment_method_map_ids"
+                                           help="Map each WooCommerce payment method to an Odoo payment term applied to imported quotations."/>
+                                </group>
+                            </group>
+                        </page>
+
+                        <!-- Auto Sync Settings -->
+                        <page string="Auto Sync">
+                            <group name="auto_sync_master">
+                                <group>
+                                    <field name="auto_sync_enabled"/>
+                                    <field name="auto_sync_batch_size"
+                                           invisible="not auto_sync_enabled"/>
+                                </group>
+                                <group>
+                                    <field name="auto_sync_interval"
+                                           required="auto_sync_enabled"
+                                           invisible="not auto_sync_enabled"/>
+                                </group>
+                            </group>
+                            <group string="Sync Types" name="auto_sync_types"
+                                   invisible="not auto_sync_enabled">
+                                <group>
+                                    <field name="auto_sync_orders"/>
+                                    <field name="auto_sync_customers"/>
+                                </group>
+                                <group>
+                                    <field name="sync_customers_from_orders"
+                                           invisible="not auto_sync_customers"/>
+                                </group>
+                                <group>
+                                    <field name="auto_sync_products"/>
+                                    <field name="auto_sync_stock"/>
+                                </group>
+                            </group>
+                            <group string="Sync Watermarks" invisible="not auto_sync_enabled">
+                                <field name="last_auto_sync" readonly="1"/>
+                                <field name="last_product_export_sync" readonly="1"/>
+                                <field name="last_product_import_sync" readonly="1"/>
+                                <field name="last_customer_sync" readonly="1"/>
+                            </group>
+                        </page>
+
+                        <!-- Connection Test -->
+                        <page string="Connection Test">
+                            <group name="test_result">
+                                <field name="last_connection_test"/>
+                                <field name="connection_test_result" colspan="2"/>
+                            </group>
+                        </page>
+                    </notebook>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <!-- ===== Search View ===== -->
+    <record id="view_woo_config_search" model="ir.ui.view">
+        <field name="name">woo.config.search</field>
+        <field name="model">woo.config</field>
+        <field name="arch" type="xml">
+            <search string="Search WooCommerce Configs">
+                <field name="name"/>
+                <field name="website_url"/>
+                <filter name="active" string="Active" domain="[('active','=',True)]"/>
+                <filter name="inactive" string="Inactive" domain="[('active','=',False)]"/>
+                <separator/>
+                <filter name="group_company" string="Company"
+                        context="{'group_by': 'company_id'}"/>
+            </search>
+        </field>
+    </record>
+
+    <!-- ===== Action ===== -->
+    <record id="action_woo_config" model="ir.actions.act_window">
+        <field name="name">WooCommerce Configurations</field>
+        <field name="res_model">woo.config</field>
+        <field name="view_mode">list,form</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">
+                Configure a WooCommerce connection to start syncing!
+            </p>
+            <p>
+                Each WooCommerce store you want to sync needs its own
+                configuration record. You'll need:
+            </p>
+            <ul>
+                <li>The store's URL</li>
+                <li>REST API Consumer Key and Consumer Secret</li>
+                <li>A Webhook Secret for secure webhook verification</li>
+            </ul>
+        </field>
+    </record>
+
+    <!-- ===== Menu ===== -->
+    <menuitem id="menu_woo_root"
+              name="WooCommerce"
+              sequence="80"
+              groups="flousflow_woo_connector.group_woo_user"/>
+
+    <menuitem id="menu_woo_config"
+              name="Configurations"
+              parent="menu_woo_root"
+              sequence="10"
+              action="action_woo_config"
+              groups="flousflow_woo_connector.group_woo_manager"/>
+</odoo>

@@ -1,0 +1,112 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- ===== Tree View ===== -->
+    <record id="view_woo_sync_queue_tree" model="ir.ui.view">
+        <field name="name">woo.sync.queue.tree</field>
+        <field name="model">woo.sync.queue</field>
+        <field name="arch" type="xml">
+            <list string="Sync Queue" decoration-danger="state=='failed'" decoration-muted="state=='cancelled'">
+                <field name="state" widget="badge"/>
+                <field name="priority"/>
+                <field name="config_id"/>
+                <field name="operation"/>
+                <field name="direction"/>
+                <field name="model_name"/>
+                <field name="woo_id" optional="hide"/>
+                <field name="retry_count"/>
+                <field name="create_date"/>
+                <field name="next_retry_at" optional="hide"/>
+            </list>
+        </field>
+    </record>
+
+    <!-- ===== Form View ===== -->
+    <record id="view_woo_sync_queue_form" model="ir.ui.view">
+        <field name="name">woo.sync.queue.form</field>
+        <field name="model">woo.sync.queue</field>
+        <field name="arch" type="xml">
+            <form string="Sync Queue Item">
+                <header>
+                    <button name="action_retry_now" type="object"
+                            groups="flousflow_woo_connector.group_woo_manager"
+                            string="Retry Now" class="btn-warning"
+                            invisible="state != 'failed'"/>
+                    <button name="action_cancel" type="object"
+                            groups="flousflow_woo_connector.group_woo_manager"
+                            string="Cancel"
+                            invisible="state not in ('pending', 'failed')"/>
+                    <field name="state" widget="badge"/>
+                </header>
+                <sheet>
+                    <group>
+                        <group>
+                            <field name="config_id"/>
+                            <field name="operation"/>
+                            <field name="direction"/>
+                            <field name="model_name"/>
+                        </group>
+                        <group>
+                            <field name="priority"/>
+                            <field name="retry_count"/>
+                            <field name="max_retries"/>
+                            <field name="next_retry_at"/>
+                        </group>
+                    </group>
+                    <group string="Details">
+                        <group>
+                            <field name="record_id"/>
+                            <field name="woo_id"/>
+                            <field name="create_date"/>
+                            <field name="process_date"/>
+                        </group>
+                    </group>
+                    <group string="Payload">
+                        <field name="payload" nolabel="1"/>
+                    </group>
+                    <group string="Last Error" invisible="not last_error">
+                        <field name="last_error" nolabel="1"/>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <!-- ===== Search View ===== -->
+    <record id="view_woo_sync_queue_search" model="ir.ui.view">
+        <field name="name">woo.sync.queue.search</field>
+        <field name="model">woo.sync.queue</field>
+        <field name="arch" type="xml">
+            <search string="Search Sync Queue">
+                <field name="operation"/>
+                <filter name="pending" string="Pending"
+                        domain="[('state','=','pending')]"/>
+                <filter name="processing" string="Processing"
+                        domain="[('state','=','processing')]"/>
+                <filter name="failed" string="Failed"
+                        domain="[('state','=','failed')]"/>
+                <filter name="done" string="Done"
+                        domain="[('state','=','done')]"/>
+                <separator/>
+                <filter name="group_state" string="Status"
+                        context="{'group_by': 'state'}"/>
+                <filter name="group_operation" string="Operation"
+                        context="{'group_by': 'operation'}"/>
+                <filter name="group_config" string="Configuration"
+                        context="{'group_by': 'config_id'}"/>
+            </search>
+        </field>
+    </record>
+
+    <!-- ===== Action ===== -->
+    <record id="action_woo_sync_queue" model="ir.actions.act_window">
+        <field name="name">Sync Queue</field>
+        <field name="res_model">woo.sync.queue</field>
+        <field name="view_mode">list,form</field>
+    </record>
+
+    <menuitem id="menu_woo_sync_queue"
+              name="Sync Queue"
+              parent="menu_woo_root"
+              sequence="20"
+              action="action_woo_sync_queue"/>
+</odoo>

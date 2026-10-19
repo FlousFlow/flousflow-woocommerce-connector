@@ -1,0 +1,357 @@
+# Translation of FlousFlow WooCommerce Connector.
+# Copyright (C) 2026 FlousFlow
+# This file is distributed under the same license as the Odoo module.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: flousflow_woo_connector 19.0\n"
+"POT-Creation-Date: 2026-07-28 06:30+0000\n"
+"PO-Revision-Date: 2026-07-28 06:30+0000\n"
+"Last-Translator: Mohamed Gamal <mohamed@flousflow.com>\n"
+"Language-Team: FlousFlow\n"
+"Language: ar\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=6; plural=n==0 ? 0 : n==1 ? 1 : n==2 ? 2 : n%100>=3 && n%100<=10 ? 3 : n%100>=11 && n%100<=99 ? 4 : 5;\n"
+"X-Generator: FlousFlow I18n Auditor\n"
+
+#. module: flousflow_woo_connector
+#: model:ir.model,name:flousflow_woo_connector.model_woo_config
+msgid "WooCommerce Configuration"
+msgstr "إعداد WooCommerce"
+
+#. module: flousflow_woo_connector
+#: model:ir.model,name:flousflow_woo_connector.model_woo_sync_log
+msgid "WooCommerce Sync Log"
+msgstr "سجل مزامنة WooCommerce"
+
+#. module: flousflow_woo_connector
+#: model:ir.model,name:flousflow_woo_connector.model_woo_sync_queue
+msgid "WooCommerce Sync Queue"
+msgstr "طابور مزامنة WooCommerce"
+
+#. module: flousflow_woo_connector
+#: model:ir.model,name:flousflow_woo_connector.model_woo_connector
+msgid "WooCommerce Connector Engine"
+msgstr "محرك ربط WooCommerce"
+
+#. module: flousflow_woo_connector
+#: model:ir.model.fields,field_description:flousflow_woo_connector.field_woo_config__name
+msgid "Name"
+msgstr "الاسم"
+
+#. module: flousflow_woo_connector
+#: model:ir.model.fields,field_description:flousflow_woo_connector.field_woo_config__website_url
+msgid "Website URL"
+msgstr "رابط الموقع"
+
+#. module: flousflow_woo_connector
+#: model:ir.model.fields,field_description:flousflow_woo_connector.field_woo_config__consumer_key
+msgid "Consumer Key"
+msgstr "مفتاح المستهلك"
+
+#. module: flousflow_woo_connector
+#: model:ir.model.fields,field_description:flousflow_woo_connector.field_woo_config__consumer_secret
+msgid "Consumer Secret"
+msgstr "كلمة سر المستهلك"
+
+#. module: flousflow_woo_connector
+#: model:ir.model.fields,field_description:flousflow_woo_connector.field_woo_config__warehouse_id
+msgid "Default Warehouse"
+msgstr "المخزن الافتراضي"
+
+#. module: flousflow_woo_connector
+#: model:ir.model.fields,field_description:flousflow_woo_connector.field_woo_config__sync_direction_products
+msgid "Product Sync Direction"
+msgstr "اتجاه مزامنة المنتجات"
+
+#. module: flousflow_woo_connector
+#: model:ir.model.fields,field_description:flousflow_woo_connector.field_woo_config__auto_create_products
+msgid "Auto-Create Products"
+msgstr "إنشاء تلقائي للمنتجات"
+
+#. module: flousflow_woo_connector
+#: model:ir.model.fields,field_description:flousflow_woo_connector.field_woo_config__woo_prices_include_tax
+msgid "WooCommerce Prices Include Tax"
+msgstr "أسعار WooCommerce تشمل الضريبة"
+
+#. module: flousflow_woo_connector
+#: model:ir.model.fields,field_description:flousflow_woo_connector.field_woo_config__tax_tolerance
+msgid "Tax Tolerance"
+msgstr "هامش تسامح الضريبة"
+
+#. module: flousflow_woo_connector
+#: model:ir.model.fields,field_description:flousflow_woo_connector.field_woo_config__log_retention_days
+msgid "Log Retention (Days)"
+msgstr "مدة الاحتفاظ بالسجلات (أيام)"
+
+#. module: flousflow_woo_connector
+#: model:ir.model.fields,field_description:flousflow_woo_connector.field_woo_config__webhook_secret
+msgid "Webhook Secret"
+msgstr "كلمة سر Webhook"
+
+#. module: flousflow_woo_connector
+#: model:ir.model.fields,field_description:flousflow_woo_connector.field_woo_config__company_id
+msgid "Company"
+msgstr "الشركة"
+
+#. module: flousflow_woo_connector
+#: model:ir.model.fields,field_description:flousflow_woo_connector.field_woo_config__api_base_url
+msgid "API Base URL"
+msgstr "رابط API الأساسي"
+
+#. module: flousflow_woo_connector
+#: model:ir.model.fields,field_description:flousflow_woo_connector.field_woo_config__last_connection_test
+msgid "Last Connection Test"
+msgstr "آخر اختبار اتصال"
+
+#. module: flousflow_woo_connector
+#: model:ir.model.fields,field_description:flousflow_woo_connector.field_woo_config__connection_test_result
+msgid "Connection Test Result"
+msgstr "نتيجة اختبار الاتصال"
+
+#. module: flousflow_woo_connector
+#: model:ir.model.fields,field_description:flousflow_woo_connector.field_woo_sync_log__model_name
+msgid "Model"
+msgstr "النموذج"
+
+#. module: flousflow_woo_connector
+#: model:ir.model.fields,field_description:flousflow_woo_connector.field_woo_sync_log__record_id
+msgid "Record ID"
+msgstr "معرف السجل"
+
+#. module: flousflow_woo_connector
+#: model:ir.model.fields,field_description:flousflow_woo_connector.field_woo_sync_log__woo_id
+msgid "WooCommerce ID"
+msgstr "معرف WooCommerce"
+
+#. module: flousflow_woo_connector
+#: model:ir.model.fields,field_description:flousflow_woo_connector.field_woo_sync_log__operation
+msgid "Operation"
+msgstr "العملية"
+
+#. module: flousflow_woo_connector
+#: model:ir.model.fields,field_description:flousflow_woo_connector.field_woo_sync_log__direction
+msgid "Direction"
+msgstr "الاتجاه"
+
+#. module: flousflow_woo_connector
+#: model:ir.model.fields,field_description:flousflow_woo_connector.field_woo_sync_log__state
+msgid "Status"
+msgstr "الحالة"
+
+#. module: flousflow_woo_connector
+#: model:ir.model.fields,field_description:flousflow_woo_connector.field_woo_sync_log__message
+msgid "Message"
+msgstr "الرسالة"
+
+#. module: flousflow_woo_connector
+#: model:ir.model.fields,field_description:flousflow_woo_connector.field_woo_sync_log__raw_request
+msgid "Raw Request"
+msgstr "الطلب الخام"
+
+#. module: flousflow_woo_connector
+#: model:ir.model.fields,field_description:flousflow_woo_connector.field_woo_sync_log__raw_response
+msgid "Raw Response"
+msgstr "الاستجابة الخام"
+
+#. module: flousflow_woo_connector
+#: model:ir.model.fields,field_description:flousflow_woo_connector.field_woo_sync_log__timestamp
+msgid "Timestamp"
+msgstr "الطابع الزمني"
+
+#. module: flousflow_woo_connector
+#: model:ir.model.fields,field_description:flousflow_woo_connector.field_woo_sync_log__duration
+msgid "Duration (seconds)"
+msgstr "المدة (ثواني)"
+
+#. module: flousflow_woo_connector
+#: model:ir.model.fields,field_description:flousflow_woo_connector.field_woo_sync_log__config_id
+msgid "WooCommerce Config"
+msgstr "إعداد WooCommerce"
+
+#. module: flousflow_woo_connector
+#: model:ir.model.fields,field_description:flousflow_woo_connector.field_woo_sync_log__user_id
+msgid "User"
+msgstr "المستخدم"
+
+#. module: flousflow_woo_connector
+#: model:ir.model.fields,field_description:flousflow_woo_connector.field_woo_sync_log__retry_count
+msgid "Retry Count"
+msgstr "عدد المحاولات"
+
+#. module: flousflow_woo_connector
+#: model:ir.model.fields,field_description:flousflow_woo_connector.field_woo_sync_queue__config_id
+msgid "WooCommerce Config"
+msgstr "إعداد WooCommerce"
+
+#. module: flousflow_woo_connector
+#: model:ir.model.fields,field_description:flousflow_woo_connector.field_woo_sync_queue__model_name
+msgid "Model"
+msgstr "النموذج"
+
+#. module: flousflow_woo_connector
+#: model:ir.model.fields,field_description:flousflow_woo_connector.field_woo_sync_queue__record_id
+msgid "Record ID"
+msgstr "معرف السجل"
+
+#. module: flousflow_woo_connector
+#: model:ir.model.fields,field_description:flousflow_woo_connector.field_woo_sync_queue__woo_id
+msgid "WooCommerce ID"
+msgstr "معرف WooCommerce"
+
+#. module: flousflow_woo_connector
+#: model:ir.model.fields,field_description:flousflow_woo_connector.field_woo_sync_queue__operation
+msgid "Operation"
+msgstr "العملية"
+
+#. module: flousflow_woo_connector
+#: model:ir.model.fields,field_description:flousflow_woo_connector.field_woo_sync_queue__direction
+msgid "Direction"
+msgstr "الاتجاه"
+
+#. module: flousflow_woo_connector
+#: model:ir.model.fields,field_description:flousflow_woo_connector.field_woo_sync_queue__payload
+msgid "Payload"
+msgstr "الحمولة"
+
+#. module: flousflow_woo_connector
+#: model:ir.model.fields,field_description:flousflow_woo_connector.field_woo_sync_queue__state
+msgid "State"
+msgstr "الحالة"
+
+#. module: flousflow_woo_connector
+#: model:ir.model.fields,field_description:flousflow_woo_connector.field_woo_sync_queue__retry_count
+msgid "Retry Count"
+msgstr "عدد المحاولات"
+
+#. module: flousflow_woo_connector
+#: model:ir.model.fields,field_description:flousflow_woo_connector.field_woo_sync_queue__max_retries
+msgid "Max Retries"
+msgstr "الحد الأقصى للمحاولات"
+
+#. module: flousflow_woo_connector
+#: model:ir.model.fields,field_description:flousflow_woo_connector.field_woo_sync_queue__next_retry_at
+msgid "Next Retry At"
+msgstr "موعد المحاولة القادمة"
+
+#. module: flousflow_woo_connector
+#: model:ir.model.fields,field_description:flousflow_woo_connector.field_woo_sync_queue__last_error
+msgid "Last Error"
+msgstr "آخر خطأ"
+
+#. module: flousflow_woo_connector
+#: model:ir.model.fields,field_description:flousflow_woo_connector.field_woo_sync_queue__priority
+msgid "Priority"
+msgstr "الأولوية"
+
+#. module: flousflow_woo_connector
+#: model:ir.model.fields,field_description:flousflow_woo_connector.field_woo_sync_queue__create_date
+msgid "Created"
+msgstr "تاريخ الإنشاء"
+
+#. module: flousflow_woo_connector
+#: model:ir.model.fields,field_description:flousflow_woo_connector.field_woo_sync_queue__process_date
+msgid "Processed At"
+msgstr "تاريخ المعالجة"
+
+#. module: flousflow_woo_connector
+#: model:ir.model.fields,field_description:flousflow_woo_connector.field_product_template__sync_to_woo
+msgid "Sync to WooCommerce"
+msgstr "مزامنة إلى WooCommerce"
+
+#. module: flousflow_woo_connector
+#: model:ir.model.fields,field_description:flousflow_woo_connector.field_product_template__woo_product_id
+msgid "WooCommerce Product ID"
+msgstr "معرف منتج WooCommerce"
+
+#. module: flousflow_woo_connector
+#: model:ir.model.fields,field_description:flousflow_woo_connector.field_product_template__woo_last_sync
+msgid "Last WooCommerce Sync"
+msgstr "آخر مزامنة WooCommerce"
+
+#. module: flousflow_woo_connector
+#: model:ir.model.fields,field_description:flousflow_woo_connector.field_product_template__woo_sync_status
+msgid "WooCommerce Sync Status"
+msgstr "حالة مزامنة WooCommerce"
+
+#. module: flousflow_woo_connector
+#: model:ir.model.fields,field_description:flousflow_woo_connector.field_product_template__woo_variant_mapping
+msgid "WooCommerce Variant Mapping"
+msgstr "تعيين المتغيرات لـ WooCommerce"
+
+#. module: flousflow_woo_connector
+#: model:ir.model.fields,field_description:flousflow_woo_connector.field_res_partner__woo_customer_id
+msgid "WooCommerce Customer ID"
+msgstr "معرف عميل WooCommerce"
+
+#. module: flousflow_woo_connector
+#: model:ir.model.fields,field_description:flousflow_woo_connector.field_res_partner__woo_last_sync
+msgid "Last WooCommerce Sync"
+msgstr "آخر مزامنة WooCommerce"
+
+#. module: flousflow_woo_connector
+#: model:ir.model.fields,field_description:flousflow_woo_connector.field_res_partner__woo_raw_data
+msgid "WooCommerce Raw Data"
+msgstr "بيانات WooCommerce الخام"
+
+#. module: flousflow_woo_connector
+#: model:ir.model.fields,field_description:flousflow_woo_connector.field_sale_order__woo_order_id
+msgid "WooCommerce Order ID"
+msgstr "معرف طلب WooCommerce"
+
+#. module: flousflow_woo_connector
+#: model:ir.model.fields,field_description:flousflow_woo_connector.field_sale_order__woo_order_number
+msgid "WooCommerce Order Number"
+msgstr "رقم طلب WooCommerce"
+
+#. module: flousflow_woo_connector
+#: model:ir.model.fields,field_description:flousflow_woo_connector.field_sale_order__woo_payment_status
+msgid "WooCommerce Payment Status"
+msgstr "حالة الدفع في WooCommerce"
+
+#. module: flousflow_woo_connector
+#: model:ir.model.fields,field_description:flousflow_woo_connector.field_sale_order__woo_payment_method
+msgid "WooCommerce Payment Method"
+msgstr "طريقة الدفع في WooCommerce"
+
+#. module: flousflow_woo_connector
+#: model:ir.model.fields,field_description:flousflow_woo_connector.field_sale_order__woo_payment_method_title
+msgid "Payment Method Title"
+msgstr "اسم طريقة الدفع"
+
+#. module: flousflow_woo_connector
+#: model:ir.model.fields,field_description:flousflow_woo_connector.field_sale_order__woo_transaction_id
+msgid "WooCommerce Transaction ID"
+msgstr "معرف معاملة WooCommerce"
+
+#. module: flousflow_woo_connector
+#: model:ir.model.fields,field_description:flousflow_woo_connector.field_sale_order__woo_gateway_fee
+msgid "Gateway Fee"
+msgstr "رسوم بوابة الدفع"
+
+#. module: flousflow_woo_connector
+#: model:ir.model.fields,field_description:flousflow_woo_connector.field_sale_order__woo_shipping_total
+msgid "WooCommerce Shipping Total"
+msgstr "إجمالي الشحن في WooCommerce"
+
+#. module: flousflow_woo_connector
+#: model:ir.model.fields,field_description:flousflow_woo_connector.field_sale_order__woo_discount_total
+msgid "WooCommerce Discount Total"
+msgstr "إجمالي الخصم في WooCommerce"
+
+#. module: flousflow_woo_connector
+#: model:ir.model.fields,field_description:flousflow_woo_connector.field_sale_order__woo_raw_payload
+msgid "WooCommerce Raw Payload"
+msgstr "الحمولة الخام من WooCommerce"
+
+#. module: flousflow_woo_connector
+#: model:ir.model.fields,field_description:flousflow_woo_connector.field_sale_order__woo_order_url
+msgid "WooCommerce Order URL"
+msgstr "رابط الطلب في WooCommerce"
+
+#. module: flousflow_woo_connector
+#: model:ir.model.fields,field_description:flousflow_woo_connector.field_sale_order__woo_config_id
+msgid "WooCommerce Config"
+msgstr "إعداد WooCommerce"

@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!--
+        Cron records are operator-owned state.  Do not overwrite active,
+        nextcall, or interval changes during a module upgrade.
+    -->
+    <data noupdate="1">
+    <!-- Auto Sync (runs per config's auto_sync_interval; default every 5 min) -->
+    <record id="ir_cron_auto_sync" model="ir.cron">
+        <field name="name">WooCommerce: Auto Sync</field>
+        <field name="model_id" ref="model_woo_connector"/>
+        <field name="state">code</field>
+        <field name="code">model._cron_auto_sync()</field>
+        <field name="interval_number">5</field>
+        <field name="interval_type">minutes</field>
+    </record>
+
+    <!-- Process Sync Queue (every 5 minutes) -->
+    <record id="ir_cron_process_queue" model="ir.cron">
+        <field name="name">WooCommerce: Process Sync Queue</field>
+        <field name="model_id" ref="model_woo_connector"/>
+        <field name="state">code</field>
+        <field name="code">model._cron_process_queue()</field>
+        <field name="interval_number">5</field>
+        <field name="interval_type">minutes</field>
+    </record>
+
+    <!-- Cleanup Old Sync Logs (weekly) -->
+    <record id="ir_cron_cleanup_logs" model="ir.cron">
+        <field name="name">WooCommerce: Cleanup Old Sync Logs</field>
+        <field name="model_id" ref="model_woo_connector"/>
+        <field name="state">code</field>
+        <field name="code">model._cron_cleanup_logs()</field>
+        <field name="interval_number">7</field>
+        <field name="interval_type">days</field>
+    </record>
+    </data>
+</odoo>

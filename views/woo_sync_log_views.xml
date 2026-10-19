@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- ===== Tree View ===== -->
+    <record id="view_woo_sync_log_tree" model="ir.ui.view">
+        <field name="name">woo.sync.log.tree</field>
+        <field name="model">woo.sync.log</field>
+        <field name="arch" type="xml">
+            <list string="Sync Logs" sample="1" decoration-danger="state=='error'" decoration-warning="state=='warning'">
+                <field name="timestamp"/>
+                <field name="config_id"/>
+                <field name="model_name"/>
+                <field name="record_id" optional="hide"/>
+                <field name="woo_id" optional="hide"/>
+                <field name="operation"/>
+                <field name="direction"/>
+                <field name="state" widget="badge"/>
+                <field name="message"/>
+                <field name="duration" optional="hide"/>
+            </list>
+        </field>
+    </record>
+
+    <!-- ===== Form View ===== -->
+    <record id="view_woo_sync_log_form" model="ir.ui.view">
+        <field name="name">woo.sync.log.form</field>
+        <field name="model">woo.sync.log</field>
+        <field name="arch" type="xml">
+            <form string="Sync Log Entry">
+                <header>
+                    <button name="action_retry" type="object"
+                            groups="flousflow_woo_connector.group_woo_manager"
+                            string="Retry" class="btn-warning"
+                            invisible="state != 'error'"/>
+                </header>
+                <sheet>
+                    <group>
+                        <group>
+                            <field name="timestamp"/>
+                            <field name="config_id"/>
+                            <field name="state" widget="badge"/>
+                            <field name="operation"/>
+                            <field name="direction"/>
+                        </group>
+                        <group>
+                            <field name="model_name"/>
+                            <field name="record_id"/>
+                            <field name="woo_id"/>
+                            <field name="user_id"/>
+                            <field name="duration"/>
+                            <field name="retry_count"/>
+                        </group>
+                    </group>
+                    <group string="Message">
+                        <field name="message" colspan="2" nolabel="1"/>
+                    </group>
+                    <notebook>
+                        <page string="Raw Request">
+                            <field name="raw_request" nolabel="1"/>
+                        </page>
+                        <page string="Raw Response">
+                            <field name="raw_response" nolabel="1"/>
+                        </page>
+                    </notebook>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <!-- ===== Search View ===== -->
+    <record id="view_woo_sync_log_search" model="ir.ui.view">
+        <field name="name">woo.sync.log.search</field>
+        <field name="model">woo.sync.log</field>
+        <field name="arch" type="xml">
+            <search string="Search Sync Logs">
+                <field name="message"/>
+                <field name="woo_id"/>
+                <field name="record_id"/>
+                <filter name="error" string="Errors"
+                        domain="[('state','=','error')]"/>
+                <filter name="warning" string="Warnings"
+                        domain="[('state','=','warning')]"/>
+                <separator/>
+                <filter name="group_state" string="Status"
+                        context="{'group_by': 'state'}"/>
+                <filter name="group_operation" string="Operation"
+                        context="{'group_by': 'operation'}"/>
+                <filter name="group_config" string="Configuration"
+                        context="{'group_by': 'config_id'}"/>
+                <filter name="group_model" string="Model"
+                        context="{'group_by': 'model_name'}"/>
+            </search>
+        </field>
+    </record>
+
+    <!-- ===== Action ===== -->
+    <record id="action_woo_sync_log" model="ir.actions.act_window">
+        <field name="name">Sync Logs</field>
+        <field name="res_model">woo.sync.log</field>
+        <field name="view_mode">list,form</field>
+        <field name="context">{'search_default_error': 1}</field>
+    </record>
+
+    <menuitem id="menu_woo_sync_log"
+              name="Sync Logs"
+              parent="menu_woo_root"
+              sequence="30"
+              action="action_woo_sync_log"/>
+</odoo>
