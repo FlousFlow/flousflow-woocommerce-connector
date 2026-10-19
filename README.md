@@ -1,6 +1,6 @@
 # FlousFlow WooCommerce Connector
 
-**Version:** 19.0.4.3.2  
+**Version:** 19.0.4.3.3  
 **Author:** FlousFlow / Mohamed Gamal  
 **License:** LGPL-3
 
@@ -137,10 +137,10 @@ completed 47 connector tests with 0 failures and 0 errors.
 
 ## Source control
 
-This deployment currently lives under `/opt/odoo19/custom_addons` inside the
-Odoo checkout. It is not a standalone Git repository and is not tracked by the
-Odoo upstream remote. Create a dedicated private repository before the next
-release so module changes, reviews, tags, and rollback artifacts are auditable.
+The release source is maintained as a standalone Git repository on branch
+`19.0`, with release tag `19.0.4.3.3`. The production copy under
+`/opt/odoo19/custom_addons` is a deployment checkout and is intentionally not
+tracked by the upstream Odoo remote.
 
 ## Security
 
