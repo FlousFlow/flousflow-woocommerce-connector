@@ -1,11 +1,11 @@
 {
     'name': 'FlousFlow WooCommerce Connector',
-    'version': '19.0.4.3.5',
+    'version': '20.0.1.0.0',
     'category': 'Sales/Sales',
-    'summary': 'Bidirectional sync between Odoo 19 and WooCommerce',
+    'summary': 'Bidirectional sync between Odoo 20 and WooCommerce',
     'description': (
         'FlousFlow WooCommerce Connector\n\n'
-        'Production-grade bidirectional synchronization between Odoo 19 and WooCommerce.\n\n'
+        'Production-grade bidirectional synchronization between Odoo 20 and WooCommerce.\n\n'
         'Features:\n'
         '- Multi-instance WooCommerce configuration\n'
         '- Product sync (WooCommerce <-> Odoo) with native variants and images\n'
@@ -31,7 +31,7 @@
     },
     'data': [
         'security/woo_security.xml',
-        'security/ir.model.access.csv',
+        'security/ir.access.csv',
         'data/ir_cron_data.xml',
         'data/woo_sequence_data.xml',
         'views/woo_config_views.xml',

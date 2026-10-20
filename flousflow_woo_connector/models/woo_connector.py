@@ -25,6 +25,7 @@ import requests
 from requests.auth import HTTPBasicAuth
 
 from odoo import api, fields, models, Command, _
+from odoo.tools import BinaryBytes
 from odoo.exceptions import UserError, ValidationError
 
 _logger = logging.getLogger(__name__)
@@ -1955,7 +1956,7 @@ class _WooApiConnector:
                 if len(response.content) > 15 * 1024 * 1024:
                     raise ValidationError(
                         _('WooCommerce image exceeds the 15 MB safety limit: %s') % img_url)
-                encoded = b64.b64encode(response.content)
+                encoded = BinaryBytes(response.content)
                 if i == 0:
                     template.image_1920 = encoded
                 woo_image_id = img_data.get('id') or 0
@@ -2216,7 +2217,7 @@ class _WooApiConnector:
                 for binding in category_bindings
             ]
 
-        base_url = self.env['ir.config_parameter'].sudo().get_param('web.base.url')
+        base_url = self.env['ir.config_parameter'].sudo().get_str('web.base.url')
         images = []
         if template.image_1920:
             images.append({
@@ -2263,7 +2264,7 @@ class _WooApiConnector:
         # website shows its specific picture. When the variant has no image,
         # WooCommerce inherits the parent product image by default.
         if variant.image_variant_1920:
-            base_url = self.env['ir.config_parameter'].sudo().get_param('web.base.url')
+            base_url = self.env['ir.config_parameter'].sudo().get_str('web.base.url')
             data['image'] = {
                 'src': f'{base_url}/web/image/product.product/{variant.id}/image_1920',
             }
@@ -2357,7 +2358,7 @@ class _WooApiConnector:
             ]
         
         # Images — primary Odoo image first, followed by the imported gallery.
-        base_url = self.env['ir.config_parameter'].sudo().get_param('web.base.url')
+        base_url = self.env['ir.config_parameter'].sudo().get_str('web.base.url')
         images = []
         if template.image_1920:
             images.append({
