@@ -85,6 +85,13 @@ class TestWooConfig(TransactionCase):
             message,
             'Connected to "https://store.example.com" (WooCommerce v11.2.1)',
         )
+    def test_root_menu_uses_module_icon(self):
+        menu = self.env.ref('flousflow_woo_connector.menu_woo_root')
+        self.assertEqual(
+            menu.web_icon,
+            'flousflow_woo_connector,static/description/icon.png',
+        )
+        self.assertTrue(menu.web_icon_data)
 
     def test_api_batch_size_is_bounded(self):
         config = self.WooConfig.create({

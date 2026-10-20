@@ -214,6 +214,7 @@
     <menuitem id="menu_woo_root"
               name="WooCommerce"
               sequence="80"
+              web_icon="flousflow_woo_connector,static/description/icon.png"
               groups="flousflow_woo_connector.group_woo_user"/>
 
     <menuitem id="menu_woo_config"
