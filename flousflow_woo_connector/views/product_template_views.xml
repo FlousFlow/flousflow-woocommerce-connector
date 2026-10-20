@@ -7,7 +7,8 @@
         <field name="inherit_id" ref="product.product_template_form_view"/>
         <field name="arch" type="xml">
             <xpath expr="//notebook" position="inside">
-                <page string="WooCommerce" name="woocommerce">
+                <page string="WooCommerce" name="woocommerce"
+                      groups="flousflow_woo_connector.group_woo_user">
                     <group>
                         <group string="Sync Settings">
                             <field name="sync_to_woo"/>
@@ -56,8 +57,10 @@
         <field name="inherit_id" ref="product.product_template_tree_view"/>
         <field name="arch" type="xml">
             <xpath expr="//field[@name='list_price']" position="after">
-                <field name="sync_to_woo" optional="hide"/>
-                <field name="woo_sync_status" widget="badge" optional="hide"/>
+                <field name="sync_to_woo" optional="hide"
+                       groups="flousflow_woo_connector.group_woo_user"/>
+                <field name="woo_sync_status" widget="badge" optional="hide"
+                       groups="flousflow_woo_connector.group_woo_user"/>
             </xpath>
         </field>
     </record>
