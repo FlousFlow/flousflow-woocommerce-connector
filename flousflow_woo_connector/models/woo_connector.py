@@ -2050,7 +2050,8 @@ class _WooApiConnector:
             if price is None and is_new:
                 price = template.list_price
 
-            woo_product_data = self._build_woo_product_data(template, price=price)
+            woo_product_data = self._build_woo_product_data(
+                template, price=price, is_new=is_new)
 
             if woo_product_id:
                 # Update existing product
@@ -2127,7 +2128,9 @@ class _WooApiConnector:
             woo_product_id = binding.woo_product_id or (
                 template.woo_product_id if template.woo_config_id == self.config else False)
 
-            parent_data = self._build_woo_variable_parent_data(template)
+            is_new = not woo_product_id
+            parent_data = self._build_woo_variable_parent_data(
+                template, is_new=is_new)
             if woo_product_id:
                 response = self._request(
                     'PUT', f'products/{woo_product_id}', data=parent_data)
@@ -2187,17 +2190,18 @@ class _WooApiConnector:
                 record_id=template.id, state='error', duration=duration)
             raise
 
-    def _build_woo_variable_parent_data(self, template):
+    def _build_woo_variable_parent_data(self, template, is_new=False):
         """Build the parent 'variable' product payload with attribute definitions."""
         data = {
             'name': template.name,
             'type': 'variable',
             'description': template.description_sale or '',
-            'short_description': template.description or '',
-            'status': 'publish' if template.active else 'draft',
+            'short_description': template.woo_short_description or '',
             'catalog_visibility': 'visible',
             'attributes': [],
         }
+        if is_new:
+            data['status'] = 'draft'
 
         for line in template.attribute_line_ids:
             values = line.value_ids
@@ -2230,6 +2234,10 @@ class _WooApiConnector:
             })
         if images:
             data['images'] = images
+
+        dimensions = self._build_woo_dimensions(template)
+        if dimensions:
+            data['dimensions'] = dimensions
 
         return data
 
@@ -2313,7 +2321,7 @@ class _WooApiConnector:
         else:
             self.env['woo.variant.binding'].create(vals)
 
-    def _build_woo_product_data(self, template, price=None):
+    def _build_woo_product_data(self, template, price=None, is_new=False):
         """Build the WooCommerce API product data dict from an Odoo template.
         
         Includes: name, type, description, short_description, SKU, price,
@@ -2335,19 +2343,24 @@ class _WooApiConnector:
             'name': template.name,
             'type': self._map_odoo_type_to_woo(getattr(template, 'detailed_type', 'product') or 'product'),
             'description': template.description_sale or '',
-            'short_description': template.description or '',
+            'short_description': template.woo_short_description or '',
             'sku': variant.barcode or '',
             'manage_stock': True,
             'stock_quantity': max(0, int(stock_variant.free_qty)),
-            'status': 'publish' if template.active else 'draft',
             'catalog_visibility': 'visible',
         }
+        if is_new:
+            data['status'] = 'draft'
         if price is not None:
             data['regular_price'] = str(price)
         
         # Weight
         if template.weight:
             data['weight'] = str(template.weight)
+
+        dimensions = self._build_woo_dimensions(template)
+        if dimensions:
+            data['dimensions'] = dimensions
         
         category_bindings = template.woo_category_binding_ids.filtered(
             lambda binding: binding.config_id == self.config)
@@ -2373,6 +2386,21 @@ class _WooApiConnector:
             data['images'] = images
         
         return data
+
+    @staticmethod
+    def _build_woo_dimensions(template):
+        """Return only configured dimensions, in WooCommerce's string format."""
+        dimensions = {
+            'length': template.woo_length,
+            'width': template.woo_width,
+            'height': template.woo_height,
+        }
+        configured = {
+            name: str(value)
+            for name, value in dimensions.items()
+            if value > 0
+        }
+        return configured or None
 
     def _map_odoo_type_to_woo(self, odoo_type):
         """Map Odoo product type to WooCommerce type."""
