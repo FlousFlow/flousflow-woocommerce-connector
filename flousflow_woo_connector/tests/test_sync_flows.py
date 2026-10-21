@@ -232,15 +232,43 @@ class TestWooSyncFlows(TransactionCase):
 
     def test_product_export_creates_store_binding(self):
         self.config.sync_direction_products = 'odoo_to_woo'
+        template = self.product.product_tmpl_id
+        template.write({
+            'description_sale': '<p>Customer-facing details</p>',
+            'description': 'Internal purchasing note — must not be exported',
+            'woo_short_description': 'Customer-facing summary',
+            'woo_length': 12.5,
+            'woo_width': 8,
+            'woo_height': 3,
+        })
         with patch.object(type(self.connector), '_request', return_value={'id': 501}):
             woo_id = self.connector._sync_product_to_woo(
-                self.product.product_tmpl_id.id)
+                template.id)
         self.assertEqual(woo_id, 501)
+        request_payload = json.loads(self.env['woo.sync.log'].search([
+            ('record_id', '=', template.id), ('direction', '=', 'odoo_to_woo'),
+            ('state', '=', 'success'),
+        ], order='id desc', limit=1).raw_request)
+        self.assertEqual(request_payload['description'], '<p>Customer-facing details</p>')
+        self.assertEqual(request_payload['short_description'], 'Customer-facing summary')
+        self.assertNotIn('Internal purchasing note', json.dumps(request_payload))
+        self.assertEqual(request_payload['dimensions'], {
+            'length': '12.5', 'width': '8.0', 'height': '3.0',
+        })
+        self.assertEqual(request_payload['status'], 'draft')
         binding = self.env['woo.product.binding'].search([
             ('config_id', '=', self.config.id),
             ('product_tmpl_id', '=', self.product.product_tmpl_id.id),
         ])
         self.assertEqual(binding.woo_product_id, 501)
+
+    def test_updating_existing_product_preserves_website_publish_status(self):
+        template = self.product.product_tmpl_id
+        template.write({'woo_product_id': 502, 'woo_config_id': self.config.id})
+        with patch.object(type(self.connector), '_request', return_value={'id': 502}) as request:
+            self.connector._sync_product_to_woo(template.id)
+        payload = request.call_args.kwargs['data']
+        self.assertNotIn('status', payload)
 
     def test_product_export_requires_manual_selection(self):
         product = self.env['product.template'].create({
@@ -646,6 +674,12 @@ class TestWooSyncFlows(TransactionCase):
             'name': 'Var Export Test',
             'type': 'consu',
             'list_price': 50.0,
+            'description_sale': '<p>Variant details for shoppers</p>',
+            'description': 'Internal variant note — must not be exported',
+            'woo_short_description': 'Variant summary',
+            'woo_length': 15,
+            'woo_width': 6,
+            'woo_height': 2,
             'sync_to_woo': True,
             'attribute_line_ids': [(0, 0, {
                 'attribute_id': attr.id,
@@ -679,6 +713,14 @@ class TestWooSyncFlows(TransactionCase):
         posts = [c for c in calls if c[0] == 'POST']
         # One POST for the parent + one POST per variation
         self.assertEqual(len(posts), 3)
+        parent_payload = next(c[2] for c in posts if c[1] == 'products')
+        self.assertEqual(parent_payload['status'], 'draft')
+        self.assertEqual(parent_payload['description'], '<p>Variant details for shoppers</p>')
+        self.assertEqual(parent_payload['short_description'], 'Variant summary')
+        self.assertNotIn('Internal variant note', json.dumps(parent_payload))
+        self.assertEqual(parent_payload['dimensions'], {
+            'length': '15.0', 'width': '6.0', 'height': '2.0',
+        })
         variation_posts = [c for c in posts if 'variations' in c[1]]
         self.assertEqual(len(variation_posts), 2)
         skus = sorted(c[2]['sku'] for c in variation_posts)

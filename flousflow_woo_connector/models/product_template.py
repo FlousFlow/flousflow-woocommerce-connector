@@ -58,6 +58,9 @@ class ProductTemplate(models.Model):
     woo_image_ids = fields.One2many(
         'woo.product.image', 'product_tmpl_id',
         string=('WooCommerce Gallery'), copy=False)
+    woo_short_description = fields.Text(
+        string='Website Short Description',
+        help='Customer-facing short description sent to WooCommerce. Internal notes are never exported.')
     woo_length = fields.Float(string=('WooCommerce Length'), copy=False)
     woo_width = fields.Float(string=('WooCommerce Width'), copy=False)
     woo_height = fields.Float(string=('WooCommerce Height'), copy=False)

@@ -35,6 +35,10 @@
                             <field name="woo_height"/>
                         </group>
                     </group>
+                    <group string="Website Content">
+                        <field name="woo_short_description"
+                               placeholder="Short customer-facing summary shown near the product price..."/>
+                    </group>
                     <group string="WooCommerce Image Gallery">
                         <field name="woo_image_ids" readonly="1">
                             <list>
