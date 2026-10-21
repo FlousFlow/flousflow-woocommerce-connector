@@ -394,6 +394,135 @@ class TestWooSyncFlows(TransactionCase):
         self.assertEqual(order.order_line.product_id, bindings.filtered(
             lambda binding: binding.woo_variant_id == 6104).product_id)
 
+    def test_variable_product_reimport_uses_existing_binding_with_local_extra_axis(self):
+        """An established Woo variation binding remains authoritative after Odoo adds a local axis."""
+        self.config.sync_direction_products = 'woo_to_odoo'
+        remote = {
+            'id': 603,
+            'name': 'Variable Uniform With Legacy Axis',
+            'type': 'variable',
+            'status': 'publish',
+            'attributes': [
+                {'name': 'Color', 'variation': True, 'options': ['Blue', 'Red']},
+                {'name': 'Size', 'variation': True, 'options': ['S', 'M']},
+            ],
+        }
+        variations = [
+            {'id': 6301, 'sku': 'VULA-B-S', 'attributes': [
+                {'name': 'Color', 'option': 'Blue'}, {'name': 'Size', 'option': 'S'}]},
+            {'id': 6302, 'sku': 'VULA-B-M', 'attributes': [
+                {'name': 'Color', 'option': 'Blue'}, {'name': 'Size', 'option': 'M'}]},
+            {'id': 6303, 'sku': 'VULA-R-S', 'attributes': [
+                {'name': 'Color', 'option': 'Red'}, {'name': 'Size', 'option': 'S'}]},
+            {'id': 6304, 'sku': 'VULA-R-M', 'attributes': [
+                {'name': 'Color', 'option': 'Red'}, {'name': 'Size', 'option': 'M'}]},
+        ]
+        with patch.object(type(self.connector), '_get_all_pages', return_value=iter(variations)):
+            template = self.connector._import_product_from_woo(remote)
+        bindings = self.env['woo.variant.binding'].search([
+            ('config_id', '=', self.config.id), ('woo_product_id', '=', 603),
+        ])
+        original_mapping = {binding.woo_variant_id: binding.product_id for binding in bindings}
+
+        legacy_attribute = self.env['product.attribute'].create({
+            'name': 'Legacy Fabric', 'create_variant': 'always',
+        })
+        legacy_values = self.env['product.attribute.value'].create([
+            {'attribute_id': legacy_attribute.id, 'name': 'Legacy A'},
+            {'attribute_id': legacy_attribute.id, 'name': 'Legacy B'},
+        ])
+        template.write({'attribute_line_ids': [Command.create({
+            'attribute_id': legacy_attribute.id,
+            'value_ids': [Command.set(legacy_values.ids)],
+        })]})
+
+        with patch.object(type(self.connector), '_get_all_pages', return_value=iter(variations)):
+            result = self.connector._import_product_from_woo(remote)
+
+        self.assertEqual(result, template)
+        self.assertEqual(
+            {binding.woo_variant_id: binding.product_id for binding in bindings},
+            original_mapping,
+        )
+
+    def test_variable_product_import_uses_unique_barcode_with_local_extra_axis(self):
+        """A unique variant SKU may map by barcode, but only inside its linked template."""
+        self.config.sync_direction_products = 'woo_to_odoo'
+        color = self.env['product.attribute'].create({
+            'name': 'Woo Fallback Color', 'create_variant': 'always',
+        })
+        size = self.env['product.attribute'].create({
+            'name': 'Woo Fallback Size', 'create_variant': 'always',
+        })
+        legacy = self.env['product.attribute'].create({
+            'name': 'Woo Fallback Legacy', 'create_variant': 'always',
+        })
+        values = {}
+        for attribute, options in [
+                (color, ['Blue', 'Red']), (size, ['S', 'M']),
+                (legacy, ['Legacy A', 'Legacy B'])]:
+            values[attribute.id] = self.env['product.attribute.value'].create([
+                {'attribute_id': attribute.id, 'name': option} for option in options
+            ])
+        template = self.env['product.template'].create({
+            'name': 'Variable Uniform Barcode Fallback',
+            'type': 'consu',
+            'company_id': self.company.id,
+            'taxes_id': False,
+            'attribute_line_ids': [Command.create({
+                'attribute_id': attribute.id,
+                'value_ids': [Command.set(values[attribute.id].ids)],
+            }) for attribute in (color, size, legacy)],
+        })
+        product_binding = self.env['woo.product.binding'].create({
+            'config_id': self.config.id,
+            'product_tmpl_id': template.id,
+            'product_id': template.product_variant_ids[:1].id,
+            'woo_product_id': 604,
+        })
+        remote = {
+            'id': 604,
+            'name': template.name,
+            'type': 'variable',
+            'status': 'publish',
+            'attributes': [
+                {'name': 'Woo Fallback Color', 'variation': True, 'options': ['Blue', 'Red']},
+                {'name': 'Woo Fallback Size', 'variation': True, 'options': ['S', 'M']},
+            ],
+        }
+        variations = []
+        for color_name, size_name, sku, remote_id in [
+                ('Blue', 'S', 'WFB-B-S', 6401), ('Blue', 'M', 'WFB-B-M', 6402),
+                ('Red', 'S', 'WFB-R-S', 6403), ('Red', 'M', 'WFB-R-M', 6404)]:
+            variant = template.product_variant_ids.filtered(
+                lambda item: color_name in item.product_template_attribute_value_ids.mapped('name')
+                and size_name in item.product_template_attribute_value_ids.mapped('name')
+                and 'Legacy A' in item.product_template_attribute_value_ids.mapped('name'))
+            self.assertEqual(len(variant), 1)
+            variant.barcode = sku
+            variations.append({
+                'id': remote_id,
+                'sku': sku,
+                'attributes': [
+                    {'name': 'Woo Fallback Color', 'option': color_name},
+                    {'name': 'Woo Fallback Size', 'option': size_name},
+                ],
+            })
+
+        with patch.object(type(self.connector), '_get_all_pages', return_value=iter(variations)):
+            result = self.connector._import_product_from_woo(remote)
+
+        self.assertEqual(result, template)
+        self.assertEqual(product_binding.woo_product_id, 604)
+        variant_bindings = self.env['woo.variant.binding'].search([
+            ('config_id', '=', self.config.id), ('woo_product_id', '=', 604),
+        ])
+        self.assertEqual(len(variant_bindings), 4)
+        self.assertEqual(
+            set(variant_bindings.mapped('product_id.barcode')),
+            {'WFB-B-S', 'WFB-B-M', 'WFB-R-S', 'WFB-R-M'},
+        )
+
     def test_variable_import_blocks_sku_collision_instead_of_using_internal_reference(self):
         self.config.sync_direction_products = 'woo_to_odoo'
         canonical_template = self.env['product.template'].create({

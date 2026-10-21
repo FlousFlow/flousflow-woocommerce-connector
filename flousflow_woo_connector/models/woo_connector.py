@@ -183,7 +183,6 @@ class WooConnector(models.AbstractModel):
                 # Auto-import products (Woo → Odoo)
                 if (config.auto_sync_products
                         and config.sync_direction_products in ('woo_to_odoo', 'both')):
-                    import_completed = True
                     product_params = {}
                     if config.last_product_import_sync:
                         product_params['modified_after'] = (
@@ -194,18 +193,23 @@ class WooConnector(models.AbstractModel):
                             'products', params=product_params,
                             per_page=batch_size):
                         try:
-                            result = connector._import_product_from_woo(woo_product)
+                            # A failed item must not leave partial product/variant
+                            # writes behind while allowing the batch to continue.
+                            with self.env.cr.savepoint():
+                                result = connector._import_product_from_woo(woo_product)
                             if result:
                                 total_products += 1
                         except Exception as exc:
-                            import_completed = False
                             self.env['woo.sync.log'].log_sync(
                                 config, 'product.template', 'error', 'woo_to_odoo',
                                 _('Automatic product import failed for WooCommerce #%(woo)s: %(error)s')
                                 % {'woo': woo_product.get('id'), 'error': str(exc)},
-                                woo_id=str(woo_product.get('id') or ''), state='error')
-                    if import_completed:
-                        config.last_product_import_sync = sync_started_at
+                                woo_id=str(woo_product.get('id') or ''), state='error',
+                                raw_request=json.dumps(woo_product, sort_keys=True))
+                    # Pagination/API exceptions escape the loop and keep the old
+                    # cursor. Per-product failures are logged individually and
+                    # must not cause the whole catalog to be rescanned forever.
+                    config.last_product_import_sync = sync_started_at
                 
                 config.last_auto_sync = fields.Datetime.now()
             except Exception as e:
@@ -1792,17 +1796,55 @@ class _WooApiConnector:
         mapped = 0
         unmapped = []
         for variation in variations:
+            variant_binding = self.env['woo.variant.binding'].search([
+                ('config_id', '=', self.config.id),
+                ('woo_product_id', '=', woo_id),
+                ('woo_variant_id', '=', variation.get('id')),
+            ], limit=1)
+            if (variant_binding
+                    and variant_binding.template_binding_id.product_tmpl_id != template):
+                raise ValidationError(
+                    _('WooCommerce variation %(variation)s is already linked to a different '
+                      'Odoo product template (%(template)s).')
+                    % {'variation': variation.get('id'),
+                       'template': variant_binding.template_binding_id.product_tmpl_id.display_name})
             combination = frozenset(
                 ((item.get('name') or '').strip().casefold(),
                  (item.get('option') or '').strip().casefold())
                 for item in variation.get('attributes', [])
                 if item.get('name') and item.get('option')
             )
-            variant = local_by_combination.get(combination)
+            # A stored binding is an explicit, auditable identity and remains
+            # authoritative when local-only attributes were added in Odoo.
+            # New/unlinked variations first require an exact combination match;
+            # if local-only axes prevent that, a unique SKU/barcode may identify
+            # a variant only inside this already-resolved product template.
+            variant = variant_binding.product_id if variant_binding else False
+            variant = variant or local_by_combination.get(combination)
+            sku = (variation.get('sku') or '').strip()
+            if not variant and sku:
+                sku_candidates = self.env['product.product'].with_context(
+                    active_test=False).with_company(self.config.company_id).search([
+                        ('barcode', '=', sku),
+                        '|', ('company_id', '=', False),
+                             ('company_id', '=', self.config.company_id.id),
+                    ], limit=2)
+                if len(sku_candidates) > 1:
+                    raise ValidationError(
+                        _('WooCommerce variation SKU "%s" matches multiple Odoo barcodes. '
+                          'Resolve the duplicate before importing this product.') % sku)
+                if sku_candidates and sku_candidates.product_tmpl_id != template:
+                    raise ValidationError(
+                        _('WooCommerce variation SKU "%(sku)s" belongs to a different '
+                          'Odoo product template (%(template)s). Resolve the identity '
+                          'conflict before importing this variation.') % {
+                            'sku': sku,
+                            'template': sku_candidates.product_tmpl_id.display_name,
+                        })
+                variant = sku_candidates
             if not variant:
                 unmapped.append(variation.get('id'))
                 continue
-            sku = (variation.get('sku') or '').strip()
             if sku:
                 if variant.barcode != sku:
                     duplicate = self.env['product.product'].with_context(active_test=False).search([
@@ -1838,10 +1880,6 @@ class _WooApiConnector:
                 if variation_price:
                     self._set_website_price(variant, variation_price)
 
-            variant_binding = self.env['woo.variant.binding'].search([
-                ('config_id', '=', self.config.id),
-                ('woo_variant_id', '=', variation.get('id')),
-            ], limit=1)
             vals = {
                 'config_id': self.config.id,
                 'template_binding_id': binding.id,

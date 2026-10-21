@@ -127,6 +127,65 @@ class TestWooConfig(TransactionCase):
         self.assertEqual(kwargs['per_page'], 25)
         self.assertIn('modified_after', kwargs['params'])
 
+    def test_product_import_failure_advances_cursor_and_rolls_back_partial_changes(self):
+        """A bad catalog item must not block the incremental cursor or leave partial data."""
+        # The production-like test database may contain another active store.
+        # Keep the cron assertion scoped to this transaction's fixture.
+        self.WooConfig.search([('auto_sync_enabled', '=', True)]).write({
+            'auto_sync_enabled': False,
+        })
+        config = self.WooConfig.create({
+            'name': 'Incremental Product Store',
+            'website_url': 'https://incremental-products.example.com',
+            'consumer_key': 'ck_test',
+            'consumer_secret': 'cs_test',
+            'warehouse_id': self.warehouse.id,
+            'auto_sync_enabled': True,
+            'auto_sync_orders': False,
+            'auto_sync_customers': False,
+            'auto_sync_products': True,
+            'sync_direction_products': 'woo_to_odoo',
+            'last_product_import_sync': False,
+            'last_auto_sync': False,
+        })
+        payload = {'id': 80421, 'name': 'Partially Imported Product', 'type': 'simple'}
+        connector = MagicMock()
+        connector._get_all_pages.return_value = iter([payload])
+
+        def create_then_fail(product_data):
+            self.env['product.template'].create({
+                'name': product_data['name'],
+                'type': 'consu',
+                'taxes_id': False,
+            })
+            raise ValidationError('simulated variation mapping failure')
+
+        connector._import_product_from_woo.side_effect = create_then_fail
+        with patch.object(
+                type(self.env['woo.connector']), '_get_connector',
+                return_value=connector):
+            self.env['woo.connector']._cron_auto_sync()
+
+        self.assertTrue(config.last_product_import_sync)
+        self.assertFalse(self.env['product.template'].search([
+            ('name', '=', 'Partially Imported Product'),
+        ]))
+        log = self.env['woo.sync.log'].search([
+            ('config_id', '=', config.id), ('woo_id', '=', '80421'),
+        ], order='id desc', limit=1)
+        self.assertEqual(log.state, 'error')
+        self.assertEqual(json.loads(log.raw_request), payload)
+
+        # The next pass is incremental instead of reloading the entire catalog.
+        config.last_auto_sync = False
+        connector._get_all_pages.return_value = iter([])
+        with patch.object(
+                type(self.env['woo.connector']), '_get_connector',
+                return_value=connector):
+            self.env['woo.connector']._cron_auto_sync()
+        self.assertIn(
+            'modified_after', connector._get_all_pages.call_args.kwargs['params'])
+
 
 @tagged('woo_connector', 'standard', 'at_install')
 class TestWooSyncLog(TransactionCase):
@@ -153,6 +212,13 @@ class TestWooSyncLog(TransactionCase):
         self.assertEqual(log.state, 'success')
         self.assertEqual(log.model_name, 'sale.order')
         self.assertEqual(log.operation, 'create')
+
+    def test_image_failure_has_a_valid_log_operation(self):
+        log = self.env['woo.sync.log'].log_sync(
+            self.config, 'product.template', 'image_error', 'woo_to_odoo',
+            'Could not import product image.', state='warning')
+        self.assertEqual(log.operation, 'image_error')
+        self.assertEqual(log.state, 'warning')
 
 
 @tagged('woo_connector', 'standard', 'at_install')

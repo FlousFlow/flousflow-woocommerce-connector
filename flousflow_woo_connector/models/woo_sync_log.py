@@ -38,6 +38,7 @@ class WooSyncLog(models.Model):
          ('manual_review_required', ('Manual Review Required')),
          ('connection_test', ('Connection Test')),
          ('stock_update', ('Stock Update')),
+         ('image_error', ('Image Error')),
          ('unlinked', ('Unlinked')),
          ('archived', ('Archived'))],
         string=('Operation'), required=True, default='create')
