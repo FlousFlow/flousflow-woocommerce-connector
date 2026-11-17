@@ -121,100 +121,120 @@ class WooConnector(models.AbstractModel):
         total_customers = 0
         
         for config in configs:
+            config_orders = 0
+            config_products = 0
+            config_customers = 0
             try:
-                sync_started_at = fields.Datetime.now()
-                batch_size = min(max(config.auto_sync_batch_size or 100, 1), 100)
-                interval = int(config.auto_sync_interval or '15')
-                if config.last_auto_sync and fields.Datetime.now() < (
-                        config.last_auto_sync + datetime.timedelta(minutes=interval)):
-                    continue
-                connector = self._get_connector(config)
+                # A failed store must not leave the shared cron transaction in
+                # PostgreSQL's aborted state and block the next store.
+                with self.env.cr.savepoint():
+                    sync_started_at = fields.Datetime.now()
+                    batch_size = min(max(config.auto_sync_batch_size or 100, 1), 100)
+                    interval = int(config.auto_sync_interval or '15')
+                    if config.last_auto_sync and fields.Datetime.now() < (
+                            config.last_auto_sync + datetime.timedelta(minutes=interval)):
+                        continue
+                    connector = self._get_connector(config)
+                    customer_sync_completed = True
                 
-                # Auto-pull orders
-                if config.auto_sync_orders:
-                    imported = connector._poll_recent_orders()
-                    total_orders += (imported or 0)
+                    # Auto-pull orders
+                    if config.auto_sync_orders:
+                        order_stats = connector._poll_recent_orders(return_stats=True)
+                        config_orders += order_stats['created'] + order_stats['updated']
                 
-                # Auto-pull customers
-                if config.auto_sync_customers:
-                    customer_params = {}
-                    if config.last_customer_sync:
-                        customer_params['modified_after'] = (
-                            config.last_customer_sync.isoformat()
-                            if hasattr(config.last_customer_sync, 'isoformat')
-                            else str(config.last_customer_sync))
-                    for customer in connector._get_all_pages(
-                            'customers', params=customer_params,
-                            per_page=batch_size):
-                        connector._match_or_create_partner(customer)
-                        total_customers += 1
-                    # Also capture shoppers that used guest checkout (no
-                    # customer account) by scanning order billing data.
-                    if config.sync_customers_from_orders:
-                        order_stats = connector._import_customers_from_orders()
-                        total_customers += (
-                            order_stats['created'] + order_stats['updated'])
-                    config.last_customer_sync = sync_started_at
+                    # Auto-pull customers. Isolate each customer so malformed
+                    # data or a uniqueness race cannot poison later records.
+                    if config.auto_sync_customers:
+                        customer_params = {}
+                        if config.last_customer_sync:
+                            customer_params['modified_after'] = (
+                                config.last_customer_sync.isoformat()
+                                if hasattr(config.last_customer_sync, 'isoformat')
+                                else str(config.last_customer_sync))
+                        for customer in connector._get_all_pages(
+                                'customers', params=customer_params,
+                                per_page=batch_size):
+                            try:
+                                with self.env.cr.savepoint():
+                                    connector._match_or_create_partner(customer)
+                                config_customers += 1
+                            except Exception as exc:
+                                customer_sync_completed = False
+                                self._log_auto_sync_failure(
+                                    config, 'res.partner', customer.get('id'), exc,
+                                    direction='woo_to_odoo')
+                        # Also capture shoppers that used guest checkout (no
+                        # customer account) by scanning order billing data.
+                        if config.sync_customers_from_orders:
+                            order_stats = connector._import_customers_from_orders()
+                            config_customers += (
+                                order_stats['created'] + order_stats['updated'])
+                            customer_sync_completed = not order_stats['failed'] and customer_sync_completed
+                        if customer_sync_completed:
+                            config.last_customer_sync = sync_started_at
                 
-                # Auto-sync products (export Odoo → Woo)
-                if (config.auto_sync_products
-                        and config.sync_direction_products in ('odoo_to_woo', 'both')):
-                    export_completed = True
-                    product_domain = [
-                        ('sync_to_woo', '=', True),
-                        ('company_id', '=', config.company_id.id),
-                    ]
-                    if config.last_product_export_sync:
-                        product_domain.append(('write_date', '>=', config.last_product_export_sync))
-                    products = self.env['product.template'].search(product_domain)
-                    for product in products:
-                        try:
-                            connector._sync_product_to_woo(product.id)
-                            total_products += 1
-                        except Exception as exc:
-                            export_completed = False
-                            self.env['woo.sync.log'].log_sync(
-                                config, 'product.template', 'error', 'odoo_to_woo',
-                                _('Automatic product export failed for %(product)s: %(error)s')
-                                % {'product': product.display_name, 'error': str(exc)},
-                                record_id=product.id, state='error')
-                    if export_completed:
-                        config.last_product_export_sync = sync_started_at
+                    # Auto-sync products (export Odoo → Woo)
+                    if (config.auto_sync_products
+                            and config.sync_direction_products in ('odoo_to_woo', 'both')):
+                        export_completed = True
+                        product_domain = [
+                            ('sync_to_woo', '=', True),
+                            ('company_id', '=', config.company_id.id),
+                        ]
+                        if config.last_product_export_sync:
+                            product_domain.append(('write_date', '>=', config.last_product_export_sync))
+                        products = self.env['product.template'].search(product_domain)
+                        for product in products:
+                            try:
+                                with self.env.cr.savepoint():
+                                    connector._sync_product_to_woo(product.id)
+                                config_products += 1
+                            except Exception as exc:
+                                export_completed = False
+                                self._log_auto_sync_failure(
+                                    config, 'product.template', product.id, exc,
+                                    direction='odoo_to_woo', record_name=product.display_name)
+                        if export_completed:
+                            config.last_product_export_sync = sync_started_at
                 
-                # Auto-import products (Woo → Odoo)
-                if (config.auto_sync_products
-                        and config.sync_direction_products in ('woo_to_odoo', 'both')):
-                    product_params = {}
-                    if config.last_product_import_sync:
-                        product_params['modified_after'] = (
-                            config.last_product_import_sync.isoformat()
-                            if hasattr(config.last_product_import_sync, 'isoformat')
-                            else str(config.last_product_import_sync))
-                    for woo_product in connector._get_all_pages(
-                            'products', params=product_params,
-                            per_page=batch_size):
-                        try:
-                            # A failed item must not leave partial product/variant
-                            # writes behind while allowing the batch to continue.
-                            with self.env.cr.savepoint():
-                                result = connector._import_product_from_woo(woo_product)
-                            if result:
-                                total_products += 1
-                        except Exception as exc:
-                            self.env['woo.sync.log'].log_sync(
-                                config, 'product.template', 'error', 'woo_to_odoo',
-                                _('Automatic product import failed for WooCommerce #%(woo)s: %(error)s')
-                                % {'woo': woo_product.get('id'), 'error': str(exc)},
-                                woo_id=str(woo_product.get('id') or ''), state='error',
-                                raw_request=json.dumps(woo_product, sort_keys=True))
-                    # Pagination/API exceptions escape the loop and keep the old
-                    # cursor. Per-product failures are logged individually and
-                    # must not cause the whole catalog to be rescanned forever.
-                    config.last_product_import_sync = sync_started_at
-                
-                config.last_auto_sync = fields.Datetime.now()
+                    # Auto-import products (Woo → Odoo)
+                    if (config.auto_sync_products
+                            and config.sync_direction_products in ('woo_to_odoo', 'both')):
+                        import_completed = True
+                        product_params = {}
+                        if config.last_product_import_sync:
+                            product_params['modified_after'] = (
+                                config.last_product_import_sync.isoformat()
+                                if hasattr(config.last_product_import_sync, 'isoformat')
+                                else str(config.last_product_import_sync))
+                        for woo_product in connector._get_all_pages(
+                                'products', params=product_params,
+                                per_page=batch_size):
+                            try:
+                                # A failed item must not leave partial product/variant
+                                # writes behind while allowing the batch to continue.
+                                with self.env.cr.savepoint():
+                                    result = connector._import_product_from_woo(woo_product)
+                                if result:
+                                    config_products += 1
+                            except Exception as exc:
+                                import_completed = False
+                                self._log_auto_sync_failure(
+                                    config, 'product.template', woo_product.get('id'), exc,
+                                    direction='woo_to_odoo', raw_request=woo_product)
+                        # Keep failed products inside the next import window.
+                        # Successful records are idempotent, so retrying is safe.
+                        if import_completed:
+                            config.last_product_import_sync = sync_started_at
+
+                    config.last_auto_sync = fields.Datetime.now()
             except Exception as e:
                 _logger.exception('Error in auto-sync for config %s: %s', config.name, e)
+                self._log_auto_sync_failure(config, 'store', config.id, e)
+            else:
+                total_orders += config_orders
+                total_products += config_products
+                total_customers += config_customers
         
         if total_orders or total_products or total_customers:
             _logger.info(
@@ -222,6 +242,33 @@ class WooConnector(models.AbstractModel):
                 total_orders, total_products, total_customers)
         
         return total_orders + total_products + total_customers
+
+    @api.model
+    def _log_auto_sync_failure(self, config, model_name, record_id, exception,
+                               direction='woo_to_odoo', record_name=None,
+                               raw_request=None):
+        """Persist a cron error after its record/store savepoint rolled back."""
+        error_text = str(exception)
+        _logger.error(
+            'WooCommerce auto-sync failed: config=%s model=%s record=%s error=%s',
+            config.display_name, model_name, record_id, error_text,
+        )
+        try:
+            with self.env.cr.savepoint():
+                label = record_name or record_id or config.display_name
+                self.env['woo.sync.log'].log_sync(
+                    config, model_name, 'error', direction,
+                    _('Automatic sync failed for %(record)s: %(error)s')
+                    % {'record': label, 'error': error_text},
+                    record_id=record_id if direction == 'odoo_to_woo' else False,
+                    woo_id=str(record_id or '') if direction == 'woo_to_odoo' else False,
+                    state='error',
+                    raw_request=json.dumps(raw_request, sort_keys=True)
+                    if raw_request else False,
+                )
+        except Exception:
+            _logger.exception(
+                'Could not persist WooCommerce sync error log for config %s', config.id)
 
     @api.model
     def _cron_poll_orders(self):
@@ -238,11 +285,13 @@ class WooConnector(models.AbstractModel):
         total_imported = 0
         for config in configs:
             try:
-                connector = self._get_connector(config)
-                imported = connector._poll_recent_orders()
-                total_imported += imported
+                with self.env.cr.savepoint():
+                    connector = self._get_connector(config)
+                    imported = connector._poll_recent_orders()
+                    total_imported += imported
             except Exception as e:
                 _logger.exception('Error polling orders for config %s: %s', config.name, e)
+                self._log_auto_sync_failure(config, 'sale.order', config.id, e)
         if total_imported:
             _logger.info('WooCommerce poll cron: imported %s orders', total_imported)
         return total_imported
@@ -1276,11 +1325,12 @@ class _WooApiConnector:
         stats = {'created': 0, 'updated': 0, 'failed': 0}
         for order_data in self._get_all_pages('orders', per_page=50):
             try:
-                existing = self.env['sale.order'].search([
-                    ('woo_order_id', '=', order_data.get('id')),
-                    ('woo_config_id', '=', self.config.id),
-                ], limit=1)
-                self._import_order_from_webhook(order_data)
+                with self.env.cr.savepoint():
+                    existing = self.env['sale.order'].search([
+                        ('woo_order_id', '=', order_data.get('id')),
+                        ('woo_config_id', '=', self.config.id),
+                    ], limit=1)
+                    self._import_order_from_webhook(order_data)
                 if not existing:
                     stats['created'] += 1
                 elif existing.state == 'draft':
@@ -1302,28 +1352,29 @@ class _WooApiConnector:
         seen = set()
         for order_data in self._get_all_pages('orders', per_page=50):
             try:
-                billing = order_data.get('billing') or {}
-                email = (billing.get('email') or '').strip()
-                email_key = email.lower() if email else ''
-                if not email_key or email_key in seen:
-                    continue
-                seen.add(email_key)
-                customer_data = {
-                    'id': order_data.get('customer_id', 0) or 0,
-                    'email': email,
-                    'first_name': billing.get('first_name', '') or '',
-                    'last_name': billing.get('last_name', '') or '',
-                    'username': email.split('@')[0] if email else '',
-                    'billing': billing,
-                    'shipping': order_data.get('shipping', {}) or {},
-                }
-                existing = self.env['res.partner'].with_company(
-                    self.config.company_id).search([
-                        ('email', '=ilike', email),
-                        '|', ('company_id', '=', False),
-                             ('company_id', '=', self.config.company_id.id),
-                    ], limit=1)
-                self._match_or_create_partner(customer_data)
+                with self.env.cr.savepoint():
+                    billing = order_data.get('billing') or {}
+                    email = (billing.get('email') or '').strip()
+                    email_key = email.lower() if email else ''
+                    if not email_key or email_key in seen:
+                        continue
+                    seen.add(email_key)
+                    customer_data = {
+                        'id': order_data.get('customer_id', 0) or 0,
+                        'email': email,
+                        'first_name': billing.get('first_name', '') or '',
+                        'last_name': billing.get('last_name', '') or '',
+                        'username': email.split('@')[0] if email else '',
+                        'billing': billing,
+                        'shipping': order_data.get('shipping', {}) or {},
+                    }
+                    existing = self.env['res.partner'].with_company(
+                        self.config.company_id).search([
+                            ('email', '=ilike', email),
+                            '|', ('company_id', '=', False),
+                                 ('company_id', '=', self.config.company_id.id),
+                        ], limit=1)
+                    self._match_or_create_partner(customer_data)
                 if existing:
                     stats['updated'] += 1
                 else:

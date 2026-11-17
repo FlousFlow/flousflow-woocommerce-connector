@@ -303,6 +303,51 @@ class TestWooSyncFlows(TransactionCase):
             ('config_id', '=', self.config.id), ('woo_product_id', '=', 88017),
         ]), 1)
 
+    def test_auto_sync_customer_database_error_does_not_block_next_customer(self):
+        previous_cursor = fields.Datetime.now() - datetime.timedelta(days=1)
+        self.config.write({
+            'auto_sync_enabled': True,
+            'auto_sync_orders': False,
+            'auto_sync_customers': True,
+            'auto_sync_products': False,
+            'sync_customers_from_orders': False,
+            'last_auto_sync': previous_cursor,
+            'last_customer_sync': previous_cursor,
+        })
+        customers = [
+            {'id': 88101, 'email': 'broken@example.com'},
+            {'id': 88102, 'email': 'good-after-error@example.com'},
+        ]
+        connector_class = type(self.connector)
+        original_match = connector_class._match_or_create_partner
+
+        def match_with_database_error(connector, customer):
+            if customer['id'] == 88101:
+                # A real PostgreSQL error makes the current transaction unusable
+                # unless the importer isolates this record in a savepoint.
+                self.env.cr.execute('SELECT 1 / 0')
+            return original_match(connector, customer)
+
+        with patch.object(type(self.config), 'search', return_value=self.config), \
+                patch.object(connector_class, '_get_all_pages',
+                             return_value=iter(customers)), \
+                patch.object(connector_class, '_match_or_create_partner',
+                             new=match_with_database_error):
+            processed = self.env['woo.connector']._cron_auto_sync()
+
+        self.assertEqual(processed, 1)
+        self.assertEqual(self.config.last_customer_sync, previous_cursor)
+        self.assertTrue(self.env['res.partner'].search([
+            ('email', '=', 'good-after-error@example.com'),
+        ]))
+        error = self.env['woo.sync.log'].search([
+            ('config_id', '=', self.config.id),
+            ('model_name', '=', 'res.partner'),
+            ('woo_id', '=', '88101'),
+            ('state', '=', 'error'),
+        ], limit=1)
+        self.assertTrue(error)
+
     def test_order_currency_mismatch_is_blocked(self):
         with self.assertRaises(ValidationError):
             self.connector._import_order_from_webhook(

@@ -11,6 +11,7 @@ Tests cover:
 
 import json
 import datetime
+import uuid
 from unittest.mock import patch, MagicMock
 
 from odoo.tests.common import TransactionCase, tagged
@@ -44,7 +45,7 @@ class TestWooConfig(TransactionCase):
         # First create is fine
         config1 = self.WooConfig.create({
             'name': 'Store 1',
-            'website_url': 'https://unique-test.example.com',
+            'website_url': f'https://unique-{uuid.uuid4().hex}.example.com',
             'consumer_key': 'ck_1',
             'consumer_secret': 'cs_1',
             'warehouse_id': self.warehouse.id,
@@ -55,7 +56,7 @@ class TestWooConfig(TransactionCase):
         with self.assertRaises(Exception):
             self.WooConfig.create({
                 'name': 'Store 2',
-                'website_url': 'https://unique-test.example.com',
+                'website_url': config1.website_url,
                 'consumer_key': 'ck_2',
                 'consumer_secret': 'cs_2',
                 'warehouse_id': self.warehouse.id,
@@ -127,8 +128,8 @@ class TestWooConfig(TransactionCase):
         self.assertEqual(kwargs['per_page'], 25)
         self.assertIn('modified_after', kwargs['params'])
 
-    def test_product_import_failure_advances_cursor_and_rolls_back_partial_changes(self):
-        """A bad catalog item must not block the incremental cursor or leave partial data."""
+    def test_product_import_failure_keeps_cursor_and_rolls_back_partial_changes(self):
+        """A bad catalog item remains retryable and leaves no partial data."""
         # The production-like test database may contain another active store.
         # Keep the cron assertion scoped to this transaction's fixture.
         self.WooConfig.search([('auto_sync_enabled', '=', True)]).write({
@@ -166,7 +167,7 @@ class TestWooConfig(TransactionCase):
                 return_value=connector):
             self.env['woo.connector']._cron_auto_sync()
 
-        self.assertTrue(config.last_product_import_sync)
+        self.assertFalse(config.last_product_import_sync)
         self.assertFalse(self.env['product.template'].search([
             ('name', '=', 'Partially Imported Product'),
         ]))
@@ -176,14 +177,14 @@ class TestWooConfig(TransactionCase):
         self.assertEqual(log.state, 'error')
         self.assertEqual(json.loads(log.raw_request), payload)
 
-        # The next pass is incremental instead of reloading the entire catalog.
+        # The next pass keeps the original watermark so the failed product is retried.
         config.last_auto_sync = False
         connector._get_all_pages.return_value = iter([])
         with patch.object(
                 type(self.env['woo.connector']), '_get_connector',
                 return_value=connector):
             self.env['woo.connector']._cron_auto_sync()
-        self.assertIn(
+        self.assertNotIn(
             'modified_after', connector._get_all_pages.call_args.kwargs['params'])
 
 
