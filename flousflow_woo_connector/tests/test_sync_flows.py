@@ -1,10 +1,11 @@
 import base64
+import datetime
 import hashlib
 import hmac
 import json
 from unittest.mock import MagicMock, patch
 
-from odoo import Command
+from odoo import Command, fields
 from odoo.exceptions import UserError, ValidationError
 from odoo.tests.common import HttpCase, TransactionCase, tagged
 
@@ -211,6 +212,96 @@ class TestWooSyncFlows(TransactionCase):
         with patch.object(type(self.connector), '_get_all_pages', return_value=iter([payload])):
             second = self.connector._poll_recent_orders(return_stats=True)
         self.assertEqual(second, {'created': 0, 'updated': 1, 'skipped': 0, 'failed': 0})
+
+    def test_order_poll_isolates_failed_order_and_keeps_watermark_for_retry(self):
+        failed_payload = self._order_payload(id=99014)
+        good_payload = self._order_payload(id=99015)
+        previous_watermark = fields.Datetime.now() - datetime.timedelta(days=2)
+        self.config.last_order_poll = previous_watermark
+        original_import = self.connector._import_order_from_webhook
+
+        def import_with_one_failure(payload):
+            if payload['id'] == failed_payload['id']:
+                self.env['product.template'].create({
+                    'name': 'Partial Failed Woo Import',
+                    'taxes_id': False,
+                })
+                raise ValidationError('simulated order import failure')
+            return original_import(payload)
+
+        with patch.object(
+                self.connector, '_get_all_pages',
+                return_value=iter([failed_payload, good_payload])), \
+                patch.object(
+                    self.connector, '_import_order_from_webhook',
+                    side_effect=import_with_one_failure):
+            stats = self.connector._poll_recent_orders(return_stats=True)
+
+        self.assertEqual(stats, {'created': 1, 'updated': 0, 'skipped': 0, 'failed': 1})
+        self.assertEqual(self.config.last_order_poll, previous_watermark)
+        self.assertFalse(self.env['product.template'].search([
+            ('name', '=', 'Partial Failed Woo Import'),
+        ]))
+        error_log = self.env['woo.sync.log'].search([
+            ('config_id', '=', self.config.id),
+            ('woo_id', '=', str(failed_payload['id'])),
+            ('state', '=', 'error'),
+        ], order='id desc', limit=1)
+        self.assertTrue(error_log)
+        self.assertIn('simulated order import failure', error_log.message)
+        self.assertTrue(self.env['sale.order'].search([
+            ('woo_config_id', '=', self.config.id),
+            ('woo_order_id', '=', good_payload['id']),
+        ]))
+
+    def test_unmapped_variations_use_placeholder_without_duplicate_parent_binding(self):
+        payload = self._order_payload(
+            id=99016,
+            line_items=[
+                {
+                    'id': 16, 'product_id': 88016, 'variation_id': 88161,
+                    'name': 'Unmapped Dress - Size S', 'sku': 'UNMAPPED-S',
+                    'quantity': 1, 'subtotal': '100.00', 'total': '100.00',
+                },
+                {
+                    'id': 17, 'product_id': 88016, 'variation_id': 88162,
+                    'name': 'Unmapped Dress - Size M', 'sku': 'UNMAPPED-M',
+                    'quantity': 1, 'subtotal': '50.00', 'total': '50.00',
+                },
+            ],
+            shipping_total='0.00', discount_total='0.00', total='150.00',
+        )
+
+        order = self.connector._import_order_from_webhook(payload)
+        placeholder = self.env['product.template'].search([
+            ('name', '=', 'Unmapped WooCommerce Product'),
+        ], limit=1).product_variant_ids[:1]
+        product_lines = order.order_line.filtered(
+            lambda line: line.product_id not in (self.shipping, self.discount)
+        )
+
+        self.assertEqual(len(product_lines), 2)
+        self.assertEqual(product_lines.mapped('product_id'), placeholder)
+        self.assertFalse(self.env['woo.product.binding'].search([
+            ('config_id', '=', self.config.id), ('woo_product_id', '=', 88016),
+        ]))
+        self.assertEqual(self.env['woo.sync.log'].search_count([
+            ('config_id', '=', self.config.id), ('state', '=', 'warning'),
+            ('woo_id', 'in', ['88161', '88162']),
+        ]), 2)
+
+    def test_auto_create_product_reuses_existing_woo_binding(self):
+        item = {
+            'product_id': 88017, 'name': 'Auto-created Simple Product',
+            'sku': 'AUTO-88017', 'price': '25.00',
+        }
+        first = self.connector._auto_create_product(item)
+        second = self.connector._auto_create_product(item)
+
+        self.assertEqual(second, first)
+        self.assertEqual(self.env['woo.product.binding'].search_count([
+            ('config_id', '=', self.config.id), ('woo_product_id', '=', 88017),
+        ]), 1)
 
     def test_order_currency_mismatch_is_blocked(self):
         with self.assertRaises(ValidationError):

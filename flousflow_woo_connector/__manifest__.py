@@ -1,6 +1,6 @@
 {
     'name': 'FlousFlow WooCommerce Connector',
-    'version': '19.0.4.3.7',
+    'version': '19.0.4.3.8',
     'category': 'Sales/Sales',
     'summary': 'Bidirectional sync between Odoo 19 and WooCommerce',
     'description': (

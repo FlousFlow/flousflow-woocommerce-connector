@@ -49,6 +49,7 @@ Production-grade bidirectional synchronization between Odoo 19 and WooCommerce. 
 10. **Incremental auto-sync:** Product and customer imports use persisted high-water marks so completed runs request only records changed since the previous run. Product exports use the Odoo template `write_date` watermark.
 11. **Bounded maintenance:** Log cleanup deletes at most 5,000 rows per SQL batch to avoid loading a million-row audit table into ORM memory.
 12. **Operator-owned cron state:** Scheduled actions are loaded as `noupdate` data and never force an administrator's active/inactive choice during module upgrades.
+13. **Order import resilience:** Each polled order is isolated in a savepoint; unknown variations use the unmapped-product placeholder until explicitly mapped, and failed orders remain inside the retry window.
 
 ## Installation
 

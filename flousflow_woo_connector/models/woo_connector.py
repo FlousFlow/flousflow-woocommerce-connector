@@ -22,6 +22,7 @@ import hashlib
 import base64
 
 import requests
+from psycopg2 import IntegrityError
 from requests.auth import HTTPBasicAuth
 
 from odoo import api, fields, models, Command, _
@@ -1064,7 +1065,7 @@ class _WooApiConnector:
             # imported order line.  Looking up the SKU first can select a
             # stale/duplicate Odoo record that happens to hold the barcode.
             product = self.env['product.product']
-            variation_id = item.get('variation_id')
+            variation_id = int(item.get('variation_id') or 0) or False
             if variation_id:
                 variant_binding = self.env['woo.variant.binding'].search([
                     ('config_id', '=', self.config.id),
@@ -1092,22 +1093,35 @@ class _WooApiConnector:
                         product = template.product_variant_ids[:1]
                 
                 if not product:
-                    if self.config.auto_create_products:
-                        # Auto-create (not recommended for production)
+                    # A parent product binding cannot identify an individual
+                    # WooCommerce variation. Keep unknown variations on the
+                    # placeholder until an explicit variant mapping exists.
+                    if self.config.auto_create_products and not variation_id:
                         product = self._auto_create_product(item)
                     else:
-                        # Use unmapped product placeholder
                         if not unmapped_product:
                             unmapped_product = self._get_or_create_unmapped_product()
                         product = unmapped_product
-                        _logger.warning(
-                            'Order #%s: Product SKU "%s" not found in Odoo. Using placeholder.',
-                            woo_data.get('id'), sku)
+                        if variation_id:
+                            message = _(
+                                'WooCommerce variation #%(variation)s for product '
+                                '#%(product)s has no Odoo mapping. Using the '
+                                'unmapped product placeholder for order #%(order)s.'
+                            ) % {
+                                'variation': variation_id,
+                                'product': item.get('product_id'),
+                                'order': woo_data.get('id'),
+                            }
+                        else:
+                            message = _(
+                                'Product SKU "%s" not found for order #%s. '
+                                'Using placeholder.'
+                            ) % (sku, woo_data.get('id'))
+                        _logger.warning('%s', message)
                         self.env['woo.sync.log'].log_sync(
                             self.config, 'product.product', 'skip', 'woo_to_odoo',
-                            _('Product SKU "%s" not found for order #%s. Using placeholder.') % (
-                                sku, woo_data.get('id')),
-                            woo_id=str(woo_data.get('id')), state='warning')
+                            message, woo_id=str(variation_id or woo_data.get('id')),
+                            state='warning')
             
             # Create order line
             line_vals = {
@@ -1327,37 +1341,69 @@ class _WooApiConnector:
         ⚠️ NOT recommended for production without manual review.
         Only called when auto_create_products is enabled.
         """
+        woo_product_id = int(item.get('product_id') or 0)
+        bindings = self.env['woo.product.binding']
+
+        def get_bound_product(binding):
+            return (binding.product_id
+                    or binding.product_tmpl_id.with_context(
+                        active_test=False).product_variant_ids[:1])
+
+        # Reuse an existing binding when duplicate/unmapped order lines arrive.
+        if woo_product_id:
+            binding = bindings.search([
+                ('config_id', '=', self.config.id),
+                ('woo_product_id', '=', woo_product_id),
+            ], limit=1)
+            if binding:
+                product = get_bound_product(binding)
+                if product:
+                    return product
+
         sku = item.get('sku', '')
         name = item.get('name', _('Imported Product'))
         price = float(item.get('price', 0) or 0)
-        
-        template = self.env['product.template'].create({
-            'name': name,
-            'list_price': price,
-            'sync_to_woo': False,  # Don't re-export auto-created products
-            'woo_product_id': item.get('product_id', 0),
-            'woo_config_id': self.config.id,
-        })
-        
-        product = template.product_variant_ids[:1]
-        if sku:
-            product.barcode = sku
-        if item.get('product_id'):
-            self.env['woo.product.binding'].create({
-                'config_id': self.config.id,
-                'product_tmpl_id': template.id,
-                'product_id': product.id,
-                'woo_product_id': item['product_id'],
-                'last_sync': fields.Datetime.now(),
-            })
-        
-        self.env['woo.sync.log'].log_sync(
-            self.config, 'product.template', 'create', 'woo_to_odoo',
-            _('Auto-created product "%s" from WooCommerce order item') % name,
-            record_id=template.id, woo_id=str(item.get('product_id', '')),
-            state='warning')
-        
-        return product
+        try:
+            # If another request creates this same Woo binding concurrently,
+            # rollback only this product creation and reuse the winner below.
+            with self.env.cr.savepoint():
+                template = self.env['product.template'].create({
+                    'name': name,
+                    'list_price': price,
+                    'sync_to_woo': False,  # Don't re-export auto-created products
+                    'woo_product_id': woo_product_id or False,
+                    'woo_config_id': self.config.id,
+                })
+
+                product = template.product_variant_ids[:1]
+                if sku:
+                    product.barcode = sku
+                if woo_product_id:
+                    bindings.create({
+                        'config_id': self.config.id,
+                        'product_tmpl_id': template.id,
+                        'product_id': product.id,
+                        'woo_product_id': woo_product_id,
+                        'last_sync': fields.Datetime.now(),
+                    })
+
+                self.env['woo.sync.log'].log_sync(
+                    self.config, 'product.template', 'create', 'woo_to_odoo',
+                    _('Auto-created product "%s" from WooCommerce order item') % name,
+                    record_id=template.id, woo_id=str(woo_product_id or ''),
+                    state='warning')
+                return product
+        except IntegrityError:
+            if not woo_product_id:
+                raise
+            binding = bindings.search([
+                ('config_id', '=', self.config.id),
+                ('woo_product_id', '=', woo_product_id),
+            ], limit=1)
+            product = get_bound_product(binding) if binding else False
+            if product:
+                return product
+            raise
 
     def _get_or_create_unmapped_product(self):
         """Get or create the placeholder 'Unmapped Product' for unmatched items."""
@@ -2608,26 +2654,40 @@ class _WooApiConnector:
         stats = {'created': 0, 'updated': 0, 'skipped': 0, 'failed': 0}
         for order_data in self._get_all_pages('orders', params=params, per_page=50):
             try:
-                existing = self.env['sale.order'].search([
-                    ('woo_order_id', '=', order_data.get('id')),
-                    ('woo_config_id', '=', self.config.id),
-                ], limit=1)
-                self._import_order_from_webhook(order_data)
-                if not existing:
-                    stats['created'] += 1
-                elif existing.state == 'draft':
-                    stats['updated'] += 1
-                else:
-                    stats['skipped'] += 1
+                # Isolate every order so one constraint/API/data error cannot
+                # poison the transaction and abort the remaining imports.
+                with self.env.cr.savepoint():
+                    existing = self.env['sale.order'].search([
+                        ('woo_order_id', '=', order_data.get('id')),
+                        ('woo_config_id', '=', self.config.id),
+                    ], limit=1)
+                    self._import_order_from_webhook(order_data)
             except Exception as e:
                 stats['failed'] += 1
                 _logger.exception('Error importing order #%s during poll', order_data.get('id'))
+                # The exception handler in the order importer runs inside the
+                # savepoint too; record a durable poll error after rollback.
+                self.env['woo.sync.log'].log_sync(
+                    self.config, 'sale.order', 'error', 'woo_to_odoo',
+                    _('Order #%s failed during polling: %s') % (
+                        order_data.get('id'), str(e)),
+                    woo_id=str(order_data.get('id') or ''), state='error')
                 continue
+
+            if not existing:
+                stats['created'] += 1
+            elif existing.state == 'draft':
+                stats['updated'] += 1
+            else:
+                stats['skipped'] += 1
 
         # Store a dedicated high-water mark only after the API cycle completed.
         # A small overlap prevents missing orders modified at the exact boundary;
         # order idempotency makes the overlap safe.
-        self.config.last_order_poll = poll_started_at - datetime.timedelta(seconds=5)
+        # Keep failed orders in the next poll window. Successful orders are
+        # imported idempotently, so they can safely be revisited with failures.
+        if not stats['failed']:
+            self.config.last_order_poll = poll_started_at - datetime.timedelta(seconds=5)
         if return_stats:
             return stats
         return stats['created'] + stats['updated'] + stats['skipped']
